@@ -92,5 +92,5 @@ func main() {
 
 ```
 ## reference
-+ [seer-robotics/escpos](https://github.com/seer-robotics/escpos/blob/master/escpos.go) （use its Chinese support,and main Code）
++ [seer-robotics/escpos](https://github.com/seer-robotics/escpos/blob/master/escpos.go) （use his Chinese support,and main Code）
 + [panjjo/escpos](https://github.com/panjjo/escpos) (refer his print images)

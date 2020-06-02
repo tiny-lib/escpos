@@ -1,6 +1,7 @@
 package escpos
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"image"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/qiniu/iconv"
 )
-
 
 // text replacement map
 var textReplaceMap = map[string]string{
@@ -565,7 +565,6 @@ func (e *Escpos) WriteNode(name string, params map[string]string, data string) {
 	}
 }
 
-
 func (e *Escpos) SetPrintPic() {
 	e.Write(fmt.Sprintf("\x1D*%c%c%v", 2, 2, "11111000001010101111100000101010"))
 }
@@ -598,6 +597,7 @@ func (e *Escpos) BarcodeHigth(n int) {
 	e.Write(fmt.Sprintf("\x1Dh%c", n))
 }
 
+// print an Image Object
 func (e *Escpos) PrintImage(img image.Image) {
 	e.SetLineSpace(1)
 	width, height := img.Bounds().Dx(), img.Bounds().Dy()
@@ -606,7 +606,7 @@ func (e *Escpos) PrintImage(img image.Image) {
 	bCommand[4] = byte(height / 256)
 	data := []byte{0, 0, 0}
 	for i := 0; i < (height/24 + 1); i++ {
-		raw:=bCommand
+		raw := bCommand
 		for j := 0; j < width; j++ {
 			for k := 0; k < 24; k++ {
 				if i*24+k < height {
@@ -624,4 +624,14 @@ func (e *Escpos) PrintImage(img image.Image) {
 
 	}
 	e.SetLineSpace(0)
+}
+
+// Print Image from Image Bytes
+func (e *Escpos) PrintImageFromBytes(imageBytes []byte) {
+	img, _, err := image.Decode(bytes.NewReader(imageBytes))
+	if err != nil {
+		log.Println("err when read image bytes", err)
+		return
+	}
+	e.PrintImage(img)
 }

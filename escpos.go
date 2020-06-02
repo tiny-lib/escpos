@@ -1,16 +1,23 @@
 package escpos
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
+	"image/png"
 	"io"
+	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
 
+	"github.com/golang/freetype"
 	"github.com/qiniu/iconv"
+	"golang.org/x/image/font"
 )
 
 // text replacement map
@@ -569,24 +576,53 @@ func (e *Escpos) SetPrintPic() {
 	e.Write(fmt.Sprintf("\x1D*%c%c%v", 2, 2, "11111000001010101111100000101010"))
 }
 
-//打印下载位图
+// 打印下载位图
 func (e *Escpos) PrintPic() {
 	e.Write(fmt.Sprintf("\x1D/%c", 0))
 }
 
-func (e *Escpos) Barcode(s string) {
-	e.Write(fmt.Sprintf("\x1Dk%c%s%c", 4, s, 0))
-	// e.Write(fmt.Sprintf("\x1Dk%c%c%s", 4, len(s), s))
-	// e.Write(fmt.Sprintf("\x1Dk%c12345678910%c", 1, 0))
+// Barcode sends a barcode to the printer.
+func (e *Escpos) Barcode(barcode string, format int) {
+	code := ""
+	switch format {
+	case 0:
+		code = "\x00"
+	case 1:
+		code = "\x01"
+	case 2:
+		code = "\x02"
+	case 3:
+		code = "\x03"
+	case 4:
+		code = "\x04"
+	case 73:
+		code = "\x49"
+	}
+
+	// reset settings
+	e.reset()
+
+	// set align
+	e.SetAlign("center")
+
+	// write barcode
+	if format > 69 {
+		e.dst.Write([]byte(fmt.Sprintf("\x1dk"+code+"%v%v", len(barcode), barcode)))
+
+	} else if format < 69 {
+		e.dst.Write([]byte(fmt.Sprintf("\x1dk"+code+"%v\x00", barcode)))
+	}
+	e.dst.Write([]byte(barcode))
+
 }
 
-//print barcode HRI
+// print barcode HRI
 func (e *Escpos) BarcodeHRI(n int) {
-	//0:no 1:top 2:down 3:top&&down
+	// 0:no 1:top 2:down 3:top&&down
 	e.Write(fmt.Sprintf("\x1DH%c", n))
 }
 
-//print barcode HRI font size
+// print barcode HRI font size
 func (e *Escpos) BarcodeHRIFontSize(n int) {
 	//0:A(12*24),1:B(9*17)
 	e.Write(fmt.Sprintf("\x1Df%c", n))
@@ -634,4 +670,67 @@ func (e *Escpos) PrintImageFromBytes(imageBytes []byte) {
 		return
 	}
 	e.PrintImage(img)
+}
+
+// PrintTextImage takes a string convert it to an image and print it
+func (e *Escpos) PrintTextImage(text string, fontFilePath string, fontSize float64, lineSpacing float64, dpi float64, imageHeight int, useFullHinting bool, useWhiteBackground bool) error {
+	// flag.Parse()
+	// Read the font data.
+	fontBytes, err := ioutil.ReadFile(fontFilePath)
+	if err != nil {
+		return err
+	}
+	f, err := freetype.ParseFont(fontBytes)
+	if err != nil {
+		return err
+	}
+
+	// Initialize the context.
+	fg, bg := image.Black, image.White
+	ruler := color.RGBA{0xdd, 0xdd, 0xdd, 0xff}
+	if useWhiteBackground {
+		fg, bg = image.White, image.Black
+		ruler = color.RGBA{0x22, 0x22, 0x22, 0xff}
+	}
+	rgba := image.NewRGBA(image.Rect(0, 0, 760, imageHeight))
+	draw.Draw(rgba, rgba.Bounds(), bg, image.Point{}, draw.Src)
+	c := freetype.NewContext()
+	c.SetDPI(dpi)
+	c.SetFont(f)
+	c.SetFontSize(fontSize)
+	c.SetClip(rgba.Bounds())
+	c.SetDst(rgba)
+	c.SetSrc(fg)
+	if useFullHinting {
+		c.SetHinting(font.HintingFull)
+	} else {
+		c.SetHinting(font.HintingNone)
+	}
+
+	// Draw the guidelines.
+	for i := 0; i < 200; i++ {
+		rgba.Set(10, 10+i, ruler)
+		rgba.Set(10+i, 10, ruler)
+	}
+
+	// Draw the text.
+	pt := freetype.Pt(10, 10+int(c.PointToFixed(fontSize)>>6))
+	_, err = c.DrawString(text, pt)
+	if err != nil {
+		return err
+	}
+	pt.Y += c.PointToFixed(fontSize * lineSpacing)
+
+	var data []byte
+	b := bufio.NewWriter(bytes.NewBuffer(data))
+	err = png.Encode(b, rgba)
+	if err != nil {
+		return err
+	}
+	err = b.Flush()
+	if err != nil {
+		return err
+	}
+	e.PrintImageFromBytes(data)
+	return nil
 }

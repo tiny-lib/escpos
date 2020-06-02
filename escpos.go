@@ -610,7 +610,7 @@ func (e *Escpos) PrintImage(img image.Image) {
 		for j := 0; j < width; j++ {
 			for k := 0; k < 24; k++ {
 				if i*24+k < height {
-					r, g, b, _ := img.At(j, (i*24 + k)).RGBA()
+					r, g, b, _ := img.At(j, i*24+k).RGBA()
 					if (r+g+b)/3/255 < 128 {
 						data[k/8] += byte(128 >> uint(k%8))
 					}
